@@ -14,7 +14,8 @@ namespace ImagesToDatabase
 {
     public partial class Form1 : Form
     {
-        DB.ImagesToDatabaseEntities _EF = new ImagesToDatabaseEntities();
+        ImagesToDatabaseEntities _EF = new ImagesToDatabaseEntities();
+        dynamic vrUploadedColor = Color.LightGreen;
         public Form1()
         {
             InitializeComponent();
@@ -24,36 +25,54 @@ namespace ImagesToDatabase
         {
             try
             {
-                //Add items in the listview
-                string[] arr = new string[2];
-                ListViewItem listViewItem;
-
-                folderBrowserDialog1.ShowDialog();
-                txtSelectedFolder.Text = folderBrowserDialog1.SelectedPath;
-                foreach (string fileName in Directory.EnumerateFiles(txtSelectedFolder.Text.Trim(), "*.*", SearchOption.AllDirectories))
-                {
-                    arr[0] = fileName;
-                    arr[1] = Path.GetFileName(fileName);
-                    listViewItem = new ListViewItem(arr);
-
-                    bool isImageExists = _EF.Images.Any(r => r.FilePath == fileName);
-                    if(isImageExists)
-                    {
-                        listViewItem.Checked = false;
-                        listViewItem.BackColor = Color.LightGreen;
-                    }
-                    else
-                    {
-                        listViewItem.Checked = false;
-                    }
-                    listView1.Items.Add(listViewItem);
-                    var dd3 = from im in _EF.Images select im;
-                }
+                FolderBrowserDialog folderBrowsDialoge = new FolderBrowserDialog();
+                folderBrowsDialoge.ShowDialog();
+                txtSelectedFolder.Text = folderBrowsDialoge.SelectedPath;
+                if (!string.IsNullOrEmpty(txtSelectedFolder.Text.Trim()))
+                    LoadFiles();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void LoadFiles()
+        {
+            if (string.IsNullOrEmpty(txtSelectedFolder.Text.Trim()))
+            {
+                MessageBox.Show("File Path Not Provided", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                btnSelectFolder.Focus();
+                return;
+            }
+            listView1.Items.Clear();
+            string[] arr = new string[2];
+            ListViewItem listViewItem;
+            var AllFiles = Directory.EnumerateFiles(txtSelectedFolder.Text.Trim(), "*.*", SearchOption.AllDirectories);
+
+            int totAlreadyExists = 0;
+            int totNewFiles = 0;
+            foreach (string fileName in AllFiles)
+            {
+                arr[0] = fileName;
+                arr[1] = Path.GetFileName(fileName);
+                listViewItem = new ListViewItem(arr);
+
+                bool isImageExists = _EF.Images.Any(r => r.FilePath == fileName);
+                if (isImageExists)
+                {
+                    totAlreadyExists = totAlreadyExists + 1;
+                    listViewItem.BackColor = vrUploadedColor;
+                }
+                else
+                {
+                    totNewFiles = totNewFiles + 1;
+                }
+                listView1.Items.Add(listViewItem);
+            }
+            lblAlreadyUploadedFiles.Text = "Files already uploaded: " + totAlreadyExists.ToString();
+            lblNewFiles.Text = "New files: " + totNewFiles.ToString();
+            lblTotalFilesFound.Text = "All files: " + (totAlreadyExists + totNewFiles).ToString();
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -67,7 +86,7 @@ namespace ImagesToDatabase
             listView1.Columns.Add("File Name", 500);
         }
 
-        public byte[] GetImageData(string filePath)
+        public byte[] ConvertFileToBytes(string filePath)
         {
             FileStream fsImageStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
             byte[] bImageData = new byte[fsImageStream.Length];
@@ -78,6 +97,7 @@ namespace ImagesToDatabase
 
         private void btnSave_Click(object sender, EventArgs e)
         {
+            int filesSavedCounter = 0;
             foreach(ListViewItem lstItem in listView1.Items)
             {
                 if(lstItem.Checked)
@@ -86,11 +106,30 @@ namespace ImagesToDatabase
                     newImage.DateCreated = DateTime.Now;
                     newImage.FileName = lstItem.SubItems[1].Text;
                     newImage.FilePath = lstItem.SubItems[0].Text;
-                    newImage.ImageBytes = GetImageData(newImage.FilePath);
+                    newImage.ImageBytes = ConvertFileToBytes(newImage.FilePath);
                     _EF.Images.Add(newImage);
-                    _EF.SaveChanges();
+                    filesSavedCounter = filesSavedCounter + 1;   
                 }
             }
+            if (filesSavedCounter > 0)
+                _EF.SaveChanges();
+            MessageBox.Show(filesSavedCounter.ToString() + " Files are now saved in database", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            this.LoadFiles();
+        }
+
+        private void chkSelectAll_CheckedChanged(object sender, EventArgs e)
+        {
+            for (int x = 0; x < listView1.Items.Count; x++)
+            {
+                if (listView1.Items[x].BackColor != vrUploadedColor)
+                    listView1.Items[x].Checked = chkSelectAll.Checked;
+            }
+        }
+
+        private void btnDownloadFiles_Click(object sender, EventArgs e)
+        {
+            frmDownload frmDownload = new frmDownload();
+            frmDownload.Show();
         }
     }
 }
